@@ -65,12 +65,13 @@ def confusion_matrix(y_true, y_pred, labels=None):
     n_labels = labels.size
     label_to_ind = dict((y, x) for x, y in enumerate(labels))
     # convert yt, yp into index
-    y_pred = np.array([label_to_ind[x] for x in y_pred])
-    y_true = np.array([label_to_ind[x] for x in y_true])
+    y_pred = np.array([label_to_ind.get(x, n_labels + 1) for x in y_pred])
+    y_true = np.array([label_to_ind.get(x, n_labels + 1) for x in y_true])
 
-    # intersect y_pred, y_true with labels
-    y_pred = y_pred[y_pred < n_labels]
-    y_true = y_true[y_true < n_labels]
+    # intersect y_pred, y_true with labels, eliminate items not in labels
+    ind = np.logical_and(y_pred < n_labels, y_true < n_labels)
+    y_pred = y_pred[ind]
+    y_true = y_true[ind]
 
     CM = np.asarray(coo_matrix((np.ones(y_true.shape[0]),
                                     (y_true, y_pred)),
@@ -282,11 +283,6 @@ def auc(x, y):
 
     """
     x, y = check_arrays(x, y)
-    if x.shape[0] != y.shape[0]:
-        raise ValueError('x and y should have the same shape'
-                         ' to compute area under curve,'
-                         ' but x.shape = %s and y.shape = %s.'
-                         % (x.shape, y.shape))
     if x.shape[0] < 2:
         raise ValueError('At least 2 points are needed to compute'
                          ' area under curve, but x.shape = %s' % x.shape)
@@ -848,7 +844,6 @@ def precision_recall_curve(y_true, probas_pred):
     # Initialize true and false positive counts, precision and recall
     total_positive = float(y_true.sum())
     tp_count, fp_count = 0., 0.
-    last_prob_val = 1.
     thresholds = []
     precision = [1.]
     recall = [0.]
@@ -863,12 +858,14 @@ def precision_recall_curve(y_true, probas_pred):
     # are encountered)
     sorted_pred_idxs = np.argsort(probas_pred, kind="mergesort")[::-1]
     pairs = np.vstack((probas_pred, y_true)).T
+    last_prob_val = probas_pred[sorted_pred_idxs[0]]
+    smallest_prob_val = probas_pred[sorted_pred_idxs[-1]]
     for idx, (prob_val, class_val) in enumerate(pairs[sorted_pred_idxs, :]):
         if class_val:
             tp_count += 1.
         else:
             fp_count += 1.
-        if (prob_val < last_prob_val) and (prob_val > 0.):
+        if (prob_val < last_prob_val) and (prob_val > smallest_prob_val):
             thresholds.append(prob_val)
             fn_count = float(total_positive - tp_count)
             precision.append(tp_count / (tp_count + fp_count))
