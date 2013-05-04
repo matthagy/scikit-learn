@@ -10,10 +10,10 @@ covariance estimator (the Minimum Covariance Determinant).
 """
 # Author: Virgile Fritsch <virgile.fritsch@inria.fr>
 #
-# License: BSD Style.
+# License: BSD 3 clause
 
 import numpy as np
-import  scipy as sp
+import scipy as sp
 from . import MinCovDet
 from ..utils import deprecated
 from ..base import ClassifierMixin
@@ -171,7 +171,7 @@ class EllipticEnvelope(ClassifierMixin, OutlierDetectionMixin, MinCovDet):
                            random_state=random_state)
         OutlierDetectionMixin.__init__(self, contamination=contamination)
 
-    def fit(self, X):
+    def fit(self, X, y=None):
         """
         """
         MinCovDet.fit(self, X)

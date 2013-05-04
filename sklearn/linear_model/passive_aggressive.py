@@ -1,12 +1,12 @@
 # Authors: Rob Zinkov, Mathieu Blondel
-# License: BSD Style.
+# License: BSD 3 clause
 
-from .stochastic_gradient import SGDClassifier
-from .stochastic_gradient import SGDRegressor
+from .stochastic_gradient import BaseSGDClassifier
+from .stochastic_gradient import BaseSGDRegressor
 from .stochastic_gradient import DEFAULT_EPSILON
 
 
-class PassiveAggressiveClassifier(SGDClassifier):
+class PassiveAggressiveClassifier(BaseSGDClassifier):
     """Passive Aggressive Classifier
 
     Parameters
@@ -67,22 +67,22 @@ class PassiveAggressiveClassifier(SGDClassifier):
     ----------
     Online Passive-Aggressive Algorithms
     <http://jmlr.csail.mit.edu/papers/volume7/crammer06a/crammer06a.pdf>
-    K. Crammer, O. Dekel, J. Keshat, S. Shalev-Shwartz, Y. Singer - JMLR 7 (2006)
+    K. Crammer, O. Dekel, J. Keshat, S. Shalev-Shwartz, Y. Singer - JMLR (2006)
 
     """
     def __init__(self, C=1.0, fit_intercept=True,
                  n_iter=5, shuffle=False, verbose=0, loss="hinge",
                  n_jobs=1, random_state=None, warm_start=False):
-        SGDClassifier.__init__(self,
-                               penalty=None,
-                               fit_intercept=fit_intercept,
-                               n_iter=n_iter,
-                               shuffle=shuffle,
-                               verbose=verbose,
-                               random_state=random_state,
-                               eta0=1.0,
-                               warm_start=warm_start,
-                               n_jobs=n_jobs)
+        BaseSGDClassifier.__init__(self,
+                                   penalty=None,
+                                   fit_intercept=fit_intercept,
+                                   n_iter=n_iter,
+                                   shuffle=shuffle,
+                                   verbose=verbose,
+                                   random_state=random_state,
+                                   eta0=1.0,
+                                   warm_start=warm_start,
+                                   n_jobs=n_jobs)
         self.C = C
         self.loss = loss
 
@@ -146,7 +146,7 @@ class PassiveAggressiveClassifier(SGDClassifier):
                          coef_init=coef_init, intercept_init=intercept_init)
 
 
-class PassiveAggressiveRegressor(SGDRegressor):
+class PassiveAggressiveRegressor(BaseSGDRegressor):
     """Passive Aggressive Regressor
 
     Parameters
@@ -154,6 +154,10 @@ class PassiveAggressiveRegressor(SGDRegressor):
 
     C : float
         Maximum step size (regularization). Defaults to 1.0.
+
+    epsilon: float
+        If the difference between the current prediction and the correct label
+        is below this threshold, the model is not updated.
 
     fit_intercept: bool
         Whether the intercept should be estimated or not. If False, the
@@ -177,7 +181,8 @@ class PassiveAggressiveRegressor(SGDRegressor):
     loss : string, optional
         The loss function to be used:
         epsilon_insensitive: equivalent to PA-I in the reference paper.
-        squared_epsilon_insensitive: equivalent to PA-II in the reference paper.
+        squared_epsilon_insensitive: equivalent to PA-II in the reference
+        paper.
 
     warm_start : bool, optional
         When set to True, reuse the solution of the previous call to fit as
@@ -201,24 +206,24 @@ class PassiveAggressiveRegressor(SGDRegressor):
     ----------
     Online Passive-Aggressive Algorithms
     <http://jmlr.csail.mit.edu/papers/volume7/crammer06a/crammer06a.pdf>
-    K. Crammer, O. Dekel, J. Keshat, S. Shalev-Shwartz, Y. Singer - JMLR 7 (2006)
+    K. Crammer, O. Dekel, J. Keshat, S. Shalev-Shwartz, Y. Singer - JMLR (2006)
 
     """
-    def __init__(self, C=1.0, fit_intercept=True,
-                 n_iter=5, shuffle=False, verbose=0, loss="epsilon_insensitive",
-                 epsilon=DEFAULT_EPSILON,
-                 random_state=None, class_weight=None, warm_start=False):
-        SGDRegressor.__init__(self,
-                              penalty=None,
-                              l1_ratio=0,
-                              epsilon=epsilon,
-                              eta0=1.0,
-                              fit_intercept=fit_intercept,
-                              n_iter=n_iter,
-                              shuffle=shuffle,
-                              verbose=verbose,
-                              random_state=random_state,
-                              warm_start=warm_start)
+    def __init__(self, C=1.0, fit_intercept=True, n_iter=5, shuffle=False,
+                 verbose=0, loss="epsilon_insensitive",
+                 epsilon=DEFAULT_EPSILON, random_state=None, class_weight=None,
+                 warm_start=False):
+        BaseSGDRegressor.__init__(self,
+                                  penalty=None,
+                                  l1_ratio=0,
+                                  epsilon=epsilon,
+                                  eta0=1.0,
+                                  fit_intercept=fit_intercept,
+                                  n_iter=n_iter,
+                                  shuffle=shuffle,
+                                  verbose=verbose,
+                                  random_state=random_state,
+                                  warm_start=warm_start)
         self.C = C
         self.loss = loss
 

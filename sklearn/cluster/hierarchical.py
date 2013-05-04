@@ -1,6 +1,6 @@
 """Hierarchical Agglomerative Clustering
 
-These routines perform some hierachical agglomerative clustering of some
+These routines perform some hierarchical agglomerative clustering of some
 input data. Currently, only Ward's algorithm is implemented.
 
 Authors : Vincent Michel, Bertrand Thirion, Alexandre Gramfort,
@@ -15,9 +15,11 @@ from scipy import sparse
 from scipy.cluster import hierarchy
 
 from ..base import BaseEstimator, ClusterMixin
-from ..utils._csgraph import cs_graph_components
 from ..externals.joblib import Memory
+from ..externals import six
 from ..metrics import euclidean_distances
+from ..utils import array2d
+from ..utils._csgraph import cs_graph_components
 
 from . import _hierarchical
 from ._feature_agglomeration import AgglomerationTransform
@@ -86,8 +88,8 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
     if connectivity is None:
         if n_clusters is not None:
             warnings.warn('Early stopping is implemented only for '
-                             'structured Ward clustering (i.e. with '
-                             'explicit connectivity.', stacklevel=2)
+                          'structured Ward clustering (i.e. with '
+                          'explicit connectivity.', stacklevel=2)
         out = hierarchy.ward(X)
         children_ = out[:, :2].astype(np.int)
         return children_, 1, n_samples, None
@@ -105,12 +107,10 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
         connectivity = connectivity.tolil()
 
     if n_components > 1:
-        warnings.warn("the number of connected components of the"
-        " connectivity matrix is %d > 1. Completing it to avoid"
-        " stopping the tree early."
-        % n_components)
-        connectivity = _fix_connectivity(X, connectivity,
-                                            n_components, labels)
+        warnings.warn("the number of connected components of the "
+                      "connectivity matrix is %d > 1. Completing it to avoid "
+                      "stopping the tree early." % n_components)
+        connectivity = _fix_connectivity(X, connectivity, n_components, labels)
         n_components = 1
 
     if n_clusters is None:
@@ -119,8 +119,8 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
         assert n_clusters <= n_samples
         n_nodes = 2 * n_samples - n_clusters
 
-    if (connectivity.shape[0] != n_samples or
-        connectivity.shape[1] != n_samples):
+    if (connectivity.shape[0] != n_samples
+            or connectivity.shape[1] != n_samples):
         raise ValueError('Wrong shape for connectivity matrix: %s '
                          'when X is %s' % (connectivity.shape, X.shape))
 
@@ -145,9 +145,9 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
     moments_2 = np.zeros((n_nodes, n_features))
     moments_2[:n_samples] = X
     inertia = np.empty(len(coord_row), dtype=np.float)
-    _hierarchical.compute_ward_dist(moments_1, moments_2,
-                             coord_row, coord_col, inertia)
-    inertia = zip(inertia, coord_row, coord_col)
+    _hierarchical.compute_ward_dist(moments_1, moments_2, coord_row, coord_col,
+                                    inertia)
+    inertia = list(six.moves.zip(inertia, coord_row, coord_col))
     heapify(inertia)
 
     # prepare the main fields
@@ -159,7 +159,7 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
     not_visited = np.empty(n_nodes, dtype=np.int8)
 
     # recursive merge loop
-    for k in xrange(n_samples, n_nodes):
+    for k in range(n_samples, n_nodes):
         # identify the merge
         while True:
             inert, i, j = heappop(inertia)
@@ -192,7 +192,7 @@ def ward_tree(X, connectivity=None, n_components=None, copy=True,
                                         coord_row, coord_col, ini)
         # List comprehension is faster than a for loop
         [heappush(inertia, (ini[idx], k, coord_col[idx]))
-            for idx in xrange(n_additions)]
+            for idx in range(n_additions)]
 
     # Separate leaves in children (empty lists up to now)
     n_leaves = n_samples
@@ -249,8 +249,8 @@ def _hc_cut(n_clusters, children, n_leaves):
     """
     if n_clusters > n_leaves:
         raise ValueError('Cannot extract more clusters than samples: '
-            '%s clusters where given for a tree with %s leaves.'
-            % (n_clusters, n_leaves))
+                         '%s clusters where given for a tree with %s leaves.'
+                         % (n_clusters, n_leaves))
     # In this function, we store nodes as a heap to avoid recomputing
     # the max of the nodes: the first element is always the smallest
     # We use negated indices as heaps work on smallest elements, and we
@@ -265,8 +265,7 @@ def _hc_cut(n_clusters, children, n_leaves):
         heappushpop(nodes, -these_children[1])
     label = np.zeros(n_leaves, dtype=np.int)
     for i, node in enumerate(nodes):
-        label[_hierarchical._hc_get_descendent(-node,
-                                children, n_leaves)] = i
+        label[_hierarchical._hc_get_descendent(-node, children, n_leaves)] = i
     return label
 
 
@@ -319,6 +318,9 @@ class Ward(BaseEstimator, ClusterMixin):
     `n_leaves_` : int
         Number of leaves in the hiearchical tree.
 
+    `n_components_` : sparse matrix.
+        The estimated number of connected components in the graph.
+
     """
 
     def __init__(self, n_clusters=2, memory=Memory(cachedir=None, verbose=0),
@@ -344,18 +346,19 @@ class Ward(BaseEstimator, ClusterMixin):
         self
         """
         memory = self.memory
-        if isinstance(memory, basestring):
-            memory = Memory(cachedir=memory)
+        X = array2d(X)
+        if isinstance(memory, six.string_types):
+            memory = Memory(cachedir=memory, verbose=0)
 
         if not self.connectivity is None:
             if not sparse.issparse(self.connectivity):
                 raise TypeError("`connectivity` should be a sparse matrix or "
-                        "None, got: %r" % type(self.connectivity))
+                                "None, got: %r" % type(self.connectivity))
 
             if (self.connectivity.shape[0] != X.shape[0] or
                     self.connectivity.shape[1] != X.shape[0]):
                 raise ValueError("`connectivity` does not have shape "
-                        "(n_samples, n_samples)")
+                                 "(n_samples, n_samples)")
 
         n_samples = len(X)
         compute_full_tree = self.compute_full_tree
@@ -371,10 +374,10 @@ class Ward(BaseEstimator, ClusterMixin):
             n_clusters = None
 
         # Construct the tree
-        self.children_, self.n_components, self.n_leaves_, parents = \
-                memory.cache(ward_tree)(X, self.connectivity,
-                            n_components=self.n_components,
-                            copy=self.copy, n_clusters=n_clusters)
+        self.children_, self.n_components_, self.n_leaves_, parents = \
+            memory.cache(ward_tree)(X, self.connectivity,
+                                    n_components=self.n_components,
+                                    copy=self.copy, n_clusters=n_clusters)
         # Cut the tree
         if compute_full_tree:
             self.labels_ = _hc_cut(self.n_clusters, self.children_,

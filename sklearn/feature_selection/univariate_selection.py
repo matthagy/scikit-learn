@@ -8,6 +8,7 @@
 
 from abc import ABCMeta, abstractmethod
 from warnings import warn
+from functools import reduce
 
 import numpy as np
 from scipy import stats
@@ -18,6 +19,7 @@ from ..preprocessing import LabelBinarizer
 from ..utils import (array2d, as_float_array, atleast2d_or_csr, check_arrays,
                      safe_asarray, safe_sqr, safe_mask)
 from ..utils.extmath import safe_sparse_dot
+from ..externals import six
 
 
 def _clean_nans(scores):
@@ -43,7 +45,7 @@ def f_oneway(*args):
     """Performs a 1-way ANOVA.
 
     The one-way ANOVA tests the null hypothesis that 2 or more groups have
-    the same population mean.  The test is applied to samples from two or
+    the same population mean. The test is applied to samples from two or
     more groups, possibly with differing sizes.
 
     Parameters
@@ -54,9 +56,9 @@ def f_oneway(*args):
     Returns
     -------
     F-value : float
-        The computed F-value of the test
+        The computed F-value of the test.
     p-value : float
-        The associated p-value from the F-distribution
+        The associated p-value from the F-distribution.
 
     Notes
     -----
@@ -92,7 +94,7 @@ def f_oneway(*args):
     n_samples_per_class = np.array([a.shape[0] for a in args])
     n_samples = np.sum(n_samples_per_class)
     ss_alldata = reduce(lambda x, y: x + y,
-            [safe_sqr(a).sum(axis=0) for a in args])
+                        [safe_sqr(a).sum(axis=0) for a in args])
     sums_args = [a.sum(axis=0) for a in args]
     square_of_sums_alldata = safe_sqr(reduce(lambda x, y: x + y, sums_args))
     square_of_sums_args = [safe_sqr(s) for s in sums_args]
@@ -119,16 +121,18 @@ def f_classif(X, y):
     Parameters
     ----------
     X : {array-like, sparse matrix} shape = [n_samples, n_features]
-        The set of regressors that will tested sequentially
+        The set of regressors that will tested sequentially.
+
     y : array of shape(n_samples)
-        The data matrix
+        The data matrix.
 
     Returns
     -------
     F : array, shape = [n_features,]
-        The set of F values
+        The set of F values.
+
     pval : array, shape = [n_features,]
-        The set of p-values
+        The set of p-values.
     """
     X, y = check_arrays(X, y)
     args = [X[safe_mask(X, y == k)] for k in np.unique(y)]
@@ -203,6 +207,7 @@ def f_regression(X, y, center=True):
     ----------
     X : {array-like, sparse matrix}  shape = (n_samples, n_features)
         The set of regressors that will tested sequentially.
+
     y : array of shape(n_samples).
         The data matrix
 
@@ -213,6 +218,7 @@ def f_regression(X, y, center=True):
     -------
     F : array, shape=(n_features,)
         F values of features.
+
     pval : array, shape=(n_features,)
         p-values of F-scores.
     """
@@ -238,10 +244,10 @@ def f_regression(X, y, center=True):
 
 
 ######################################################################
-# General class for filter univariate selection
+# Base classes
 
-class _AbstractUnivariateFilter(BaseEstimator, TransformerMixin):
-    __metaclass__ = ABCMeta
+class _BaseFilter(six.with_metaclass(ABCMeta, BaseEstimator,
+                                     TransformerMixin)):
 
     def __init__(self, score_func):
         """ Initialize the univariate feature selection.
@@ -258,16 +264,9 @@ class _AbstractUnivariateFilter(BaseEstimator, TransformerMixin):
                 "was passed." % (score_func, type(score_func)))
         self.score_func = score_func
 
+    @abstractmethod
     def fit(self, X, y):
-        """
-        Evaluate the function
-        """
-        self.scores_, self.pvalues_ = self.score_func(X, y)
-        if len(np.unique(self.pvalues_)) < len(self.pvalues_):
-            warn("Duplicate p-values. Result may depend on feature ordering."
-                 "There are probably duplicate features, or you used a "
-                 "classification score for a regression task.")
-        return self
+        """Run score function on (X, y) and get the appropriate features."""
 
     def get_support(self, indices=False):
         """
@@ -304,11 +303,40 @@ class _AbstractUnivariateFilter(BaseEstimator, TransformerMixin):
         return Xt
 
 
+class _PvalueFilter(_BaseFilter):
+    def fit(self, X, y):
+        """Evaluate the score function on samples X with outputs y.
+
+        Records and selects features according to the p-values output by the
+        score function.
+        """
+        self.scores_, self.pvalues_ = self.score_func(X, y)
+        if len(np.unique(self.pvalues_)) < len(self.pvalues_):
+            warn("Duplicate p-values. Result may depend on feature ordering."
+                 "There are probably duplicate features, or you used a "
+                 "classification score for a regression task.")
+        return self
+
+
+class _ScoreFilter(_BaseFilter):
+    def fit(self, X, y):
+        """Evaluate the score function on samples X with outputs y.
+
+        Records and selects features according to their scores.
+        """
+        self.scores_, self.pvalues_ = self.score_func(X, y)
+        if len(np.unique(self.scores_)) < len(self.scores_):
+            warn("Duplicate scores. Result may depend on feature ordering."
+                 "There are probably duplicate features, or you used a "
+                 "classification score for a regression task.")
+        return self
+
+
 ######################################################################
 # Specific filters
 ######################################################################
 
-class SelectPercentile(_AbstractUnivariateFilter):
+class SelectPercentile(_ScoreFilter):
     """Select features according to a percentile of the highest scores.
 
     Parameters
@@ -322,15 +350,15 @@ class SelectPercentile(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
 
     Notes
     -----
-    Ties between features with equal p-values will be broken in an unspecified
+    Ties between features with equal scores will be broken in an unspecified
     way.
 
     """
@@ -365,7 +393,7 @@ class SelectPercentile(_AbstractUnivariateFilter):
         return mask
 
 
-class SelectKBest(_AbstractUnivariateFilter):
+class SelectKBest(_ScoreFilter):
     """Select features according to the k highest scores.
 
     Parameters
@@ -374,15 +402,16 @@ class SelectKBest(_AbstractUnivariateFilter):
         Function taking two arrays X and y, and returning a pair of arrays
         (scores, pvalues).
 
-    k : int, optional, default=10
+    k : int or "all", optional, default=10
         Number of top features to select.
+        The "all" option bypasses selection, for use in a parameter search.
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
 
     Notes
@@ -398,8 +427,11 @@ class SelectKBest(_AbstractUnivariateFilter):
 
     def _get_support_mask(self):
         k = self.k
+        if k == 'all':
+            return np.ones(self.scores_.shape, dtype=bool)
         if k > len(self.scores_):
-            raise ValueError("cannot select %d features among %d"
+            raise ValueError("Cannot select %d features among %d. "
+                             "Use k='all' to return all features."
                              % (k, len(self.scores_)))
 
         scores = _clean_nans(self.scores_)
@@ -411,7 +443,7 @@ class SelectKBest(_AbstractUnivariateFilter):
         return mask
 
 
-class SelectFpr(_AbstractUnivariateFilter):
+class SelectFpr(_PvalueFilter):
     """Filter: Select the pvalues below alpha based on a FPR test.
 
     FPR test stands for False Positive Rate test. It controls the total
@@ -428,10 +460,10 @@ class SelectFpr(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -444,7 +476,7 @@ class SelectFpr(_AbstractUnivariateFilter):
         return self.pvalues_ < alpha
 
 
-class SelectFdr(_AbstractUnivariateFilter):
+class SelectFdr(_PvalueFilter):
     """Filter: Select the p-values for an estimated false discovery rate
 
     This uses the Benjamini-Hochberg procedure. ``alpha`` is the target false
@@ -462,10 +494,10 @@ class SelectFdr(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -480,7 +512,7 @@ class SelectFdr(_AbstractUnivariateFilter):
         return self.pvalues_ <= threshold
 
 
-class SelectFwe(_AbstractUnivariateFilter):
+class SelectFwe(_PvalueFilter):
     """Filter: Select the p-values corresponding to Family-wise error rate
 
     Parameters
@@ -494,10 +526,10 @@ class SelectFwe(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -514,7 +546,9 @@ class SelectFwe(_AbstractUnivariateFilter):
 # Generic filter
 ######################################################################
 
-class GenericUnivariateSelect(_AbstractUnivariateFilter):
+# TODO this class should fit on either p-values or scores,
+# depending on the mode.
+class GenericUnivariateSelect(_PvalueFilter):
     """Univariate feature selector with configurable strategy.
 
     Parameters
@@ -531,10 +565,10 @@ class GenericUnivariateSelect(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -550,8 +584,8 @@ class GenericUnivariateSelect(_AbstractUnivariateFilter):
             raise ValueError(
                 "The mode passed should be one of %s, %r, (type %s) "
                 "was passed." % (
-                        self._selection_modes.keys(),
-                        mode, type(mode)))
+                    self._selection_modes.keys(),
+                    mode, type(mode)))
         super(GenericUnivariateSelect, self).__init__(score_func)
         self.mode = mode
         self.param = param

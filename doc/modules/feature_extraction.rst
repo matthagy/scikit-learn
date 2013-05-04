@@ -102,6 +102,117 @@ memory the ``DictVectorizer`` class uses a ``scipy.sparse`` matrix by
 default instead of a ``numpy.ndarray``.
 
 
+.. _feature_hashing:
+
+Feature hashing
+===============
+
+.. currentmodule:: sklearn.feature_extraction
+
+The class :class:`FeatureHasher` is a high-speed, low-memory vectorizer that
+uses a technique known as
+`feature hashing <https://en.wikipedia.org/wiki/Feature_hashing>`_,
+or the "hashing trick".
+Instead of building a hash table of the features encountered in training,
+as the vectorizers do, instances of :class:`FeatureHasher`
+apply a hash function to the features
+to determine their column index in sample matrices directly.
+The result is increased speed and reduced memory usage,
+at the expense of inspectability;
+the hasher does not remember what the input features looked like
+and has no ``inverse_transform`` method.
+
+Since the hash function might cause collisions between (unrelated) features,
+a signed hash function is used and the sign of the hash value
+determines the sign of the value stored in the output matrix for a feature.
+This way, collisions are likely to cancel out rather than accumulate error,
+and the expected mean of any output feature's value is zero.
+
+If ``non_negative=True`` is passed to the constructor,
+the absolute value is taken.
+This undoes some of the collision handling,
+but allows the output to be passed to estimators like :class:`MultinomialNB`
+or ``chi2`` feature selectors that expect non-negative inputs.
+
+:class:`FeatureHasher` accepts either mappings
+(like Python's ``dict`` and its variants in the ``collections`` module),
+``(feature, value)`` pairs, or strings,
+depending on the constructor parameter ``input_type``.
+Mapping are treated as lists of ``(feature, value)`` pairs,
+while single strings have an implicit value of 1,
+so ``['feat1', 'feat2', 'feat3']`` is interpreted as
+``[('feat1', 1), ('feat2', 1), ('feat3', 1)]``.
+If a single feature occurs multiple times in a sample,
+the associated values will be summed
+(so ``('feat', 2)`` and ``('feat', 3.5)`` become ``('feat', 5.5)``).
+The output from :class:`FeatureHasher` is always a ``scipy.sparse`` matrix
+in the CSR format.
+
+Feature hashing can be employed in document classification,
+but unlike :class:`text.CountVectorizer`,
+:class:`FeatureHasher` does not do word
+splitting or any other preprocessing except Unicode-to-UTF-8 encoding;
+see :ref:`hashing_vectorizer`, below, for a combined tokenizer/hasher.
+
+As an example, consider a word-level natural language processing task
+that needs features extracted from ``(token, part_of_speech)`` pairs.
+One could use a Python generator function to extract features::
+
+  def token_features(token, part_of_speech):
+      if token.isdigit():
+          yield "numeric"
+      else:
+          yield "token={}".format(token.lower())
+          yield "token,pos={},{}".format(token, part_of_speech)
+      if token[0].isupper():
+          yield "uppercase_initial"
+      if token.isupper():
+          yield "all_uppercase"
+      yield "pos={}".format(part_of_speech)
+
+Then, the ``raw_X`` to be fed to ``FeatureHasher.transform``
+can be constructed using::
+
+  raw_X = (token_features(tok, pos_tagger(tok)) for tok in corpus)
+
+and fed to a hasher with::
+
+  hasher = FeatureHasher(input_type=string)
+  X = hasher.transform(raw_X)
+
+to get a ``scipy.sparse`` matrix ``X``.
+
+Note the use of a generator comprehension,
+which introduces laziness into the feature extraction:
+tokens are only processed on demand from the hasher.
+
+Implementation details
+----------------------
+
+:class:`FeatureHasher` uses the signed 32-bit variant of MurmurHash3.
+As a result (and because of limitations in ``scipy.sparse``),
+the maximum number of features supported is currently :math:`2^{31} - 1`.
+
+The original formulation of the hashing trick by Weinberger et al.
+used two separate hash functions :math:`h` and :math:`\xi`
+to determine the column index and sign of a feature, respectively.
+The present implementation works under the assumption
+that the sign bit of MurmurHash3 is independent of its other bits.
+
+Since a simple modulo is used to transform the hash function to a column index,
+it is advisable to use a power of two as the ``n_features`` parameter;
+otherwise the features will not be mapped evenly to the columns.
+
+
+.. topic:: References:
+
+ * Kilian Weinberger, Anirban Dasgupta, John Langford, Alex Smola and
+   Josh Attenberg (2009). `Feature hashing for large scale multitask learning
+   <http://alex.smola.org/papers/2009/Weinbergeretal09.pdf>`_. Proc. ICML.
+
+ * `MurmurHash3 <http://code.google.com/p/smhasher/wiki/MurmurHash3>`_.
+
+
 .. _text_feature_extraction:
 
 Text feature extraction
@@ -180,12 +291,12 @@ reasonable (please see  the :ref:`reference documentation
 
   >>> vectorizer = CountVectorizer(min_df=1)
   >>> vectorizer                            # doctest: +NORMALIZE_WHITESPACE
-  CountVectorizer(analyzer='word', binary=False, charset='utf-8',
-          charset_error='strict', dtype=<type 'long'>, input='content',
-          lowercase=True, max_df=1.0, max_features=None, max_n=None, min_df=1,
-          min_n=None, ngram_range=(1, 1), preprocessor=None, stop_words=None,
-          strip_accents=None, token_pattern=u'(?u)\\b\\w\\w+\\b', tokenizer=None,
-          vocabulary=None)
+  CountVectorizer(analyzer=u'word', binary=False, charset=u'utf-8',
+          charset_error=u'strict', dtype=<type 'numpy.int64'>,
+          input=u'content', lowercase=True, max_df=1.0, max_features=None,
+          min_df=1, ngram_range=(1, 1), preprocessor=None, 
+          stop_words=None, strip_accents=None,
+          token_pattern=u'(?u)\\b\\w\\w+\\b', tokenizer=None, vocabulary=None)
 
 Let's use it to tokenize and count the word occurrences of a minimalistic
 corpus of text documents::
@@ -199,7 +310,7 @@ corpus of text documents::
   >>> X = vectorizer.fit_transform(corpus)
   >>> X                                       # doctest: +NORMALIZE_WHITESPACE
   <4x9 sparse matrix of type '<type 'numpy.int64'>'
-      with 19 stored elements in COOrdinate format>
+      with 19 stored elements in Compressed Sparse Column format>
 
 The default configuration tokenizes the string by extracting words of
 at least 2 letters. The specific function that does this step can be
@@ -283,7 +394,7 @@ suitable for usage by a classifier it is very common to use the tf–idf
 transform.
 
 Tf means **term-frequency** while tf–idf means term-frequency times
-**inverse document-frequency**. This is a orginally a term weighting
+**inverse document-frequency**. This is a originally a term weighting
 scheme developed for information retrieval (as a ranking function
 for search engines results), that has also found good use in document
 classification and clustering.
@@ -293,8 +404,9 @@ class::
 
   >>> from sklearn.feature_extraction.text import TfidfTransformer
   >>> transformer = TfidfTransformer()
-  >>> transformer
-  TfidfTransformer(norm='l2', smooth_idf=True, sublinear_tf=False, use_idf=True)
+  >>> transformer   # doctest: +NORMALIZE_WHITESPACE
+  TfidfTransformer(norm=u'l2', smooth_idf=True, sublinear_tf=False,
+                   use_idf=True)
 
 Again please see the :ref:`reference documentation
 <text_feature_extraction_ref>` for the details on all the parameters.
@@ -376,7 +488,7 @@ together by applying clustering algorithms such as :ref:`k_means`:
   * :ref:`example_document_clustering.py`
 
 Finally it is possible to discover the main topics of a corpus by
-relaxing the hard assignement constraint of clustering, for instance by
+relaxing the hard assignment constraint of clustering, for instance by
 using :ref:`NMF`:
 
   * :ref:`example_applications_topics_extraction_with_nmf.py`
@@ -392,7 +504,7 @@ misspellings or word derivations.
 
 N-grams to the rescue! Instead of building a simple collection of
 unigrams (n=1), one might prefer a collection of bigrams (n=2), where
-occurences of pairs of consecutive words are counted.
+occurrences of pairs of consecutive words are counted.
 
 One might alternatively consider a collection of character n-grams, a
 representation resiliant against misspellings and derivations.
@@ -423,7 +535,7 @@ span across words::
   >>> ngram_vectorizer.fit_transform(['jumpy fox'])
   ...                                         # doctest: +NORMALIZE_WHITESPACE
   <1x4 sparse matrix of type '<type 'numpy.int64'>'
-     with 4 stored elements in COOrdinate format>
+     with 4 stored elements in Compressed Sparse Column format>
   >>> ngram_vectorizer.get_feature_names()
   [u' fox ', u' jump', u'jumpy', u'umpy ']
 
@@ -431,7 +543,7 @@ span across words::
   >>> ngram_vectorizer.fit_transform(['jumpy fox'])
   ...                                         # doctest: +NORMALIZE_WHITESPACE
   <1x5 sparse matrix of type '<type 'numpy.int64'>'
-      with 5 stored elements in COOrdinate format>
+      with 5 stored elements in Compressed Sparse Column format>
   >>> ngram_vectorizer.get_feature_names()
   [u'jumpy', u'mpy f', u'py fo', u'umpy ', u'y fox']
 
@@ -454,8 +566,96 @@ into account. Many such models will thus be casted as "Structured output"
 problems which are currently outside of the scope of scikit-learn.
 
 
+.. _hashing_vectorizer:
+
+Vectorizing a large text corpus with the hashing trick
+------------------------------------------------------
+
+The above vectorization scheme is simple but the fact that it holds an **in-
+memory mapping from the string tokens to the integer feature indices** (the
+``vocabulary_`` attribute) causes several **problems when dealing with large
+datasets**:
+
+- the larger the corpus, the larger the vocabulary will grow and hence the
+  memory use too,
+
+- fitting requires the allocation of intermediate data structures
+  of size proportional to that of the original dataset.
+
+- building the word-mapping requires a full pass over the dataset hence it is
+  not possible to fit text classifiers in a strictly online manner.
+
+- pickling and un-pickling vectorizers with a large ``vocabulary_`` can be very
+  slow (typically much slower than pickling / un-pickling flat data structures
+  such as a NumPy array of the same size),
+
+- it is not easily possible to split the vectorization work into concurrent sub
+  tasks as the ``vocabulary_`` attribute would have to be a shared state with a
+  fine grained synchronization barrier: the mapping from token string to
+  feature index is dependent on ordering of the first occurrence of each token
+  hence would have to be shared, potentially harming the concurrent workers'
+  performance to the point of making them slower than the sequential variant.
+
+It is possible to overcome those limitations by combining the "hashing trick"
+(:ref:`Feature_hashing`) implemented by the
+:class:`sklearn.feature_extraction.FeatureHasher` class and the text
+preprocessing and tokenization features of the :class:`CountVectorizer`.
+
+This combination is implementing in :class:`HashingVectorizer`,
+a transformer class that is mostly API compatible with :class:`CountVectorizer`.
+:class:`HashingVectorizer` is stateless,
+meaning that you don't have to call ``fit`` on it::
+
+  >>> from sklearn.feature_extraction.text import HashingVectorizer
+  >>> hv = HashingVectorizer(n_features=10)
+  >>> hv.transform(corpus)
+  ...                                       # doctest: +NORMALIZE_WHITESPACE
+  <4x10 sparse matrix of type '<type 'numpy.float64'>'
+      with 16 stored elements in Compressed Sparse Row format>
+
+You can see that 16 non-zero feature tokens where extracted in the vector
+output: this is less than the 19 non-zeros extracted previously by the
+:class:`CountVectorizer` on the same toy corpus. The discrepancy comes from
+hash function collisions because of the low value of the ``n_features`` parameter.
+
+In a real world setting, the ``n_features`` parameter can be left to its
+default value of ``2 ** 20`` (roughly one million possible features). If memory
+or downstream models size is an issue selecting a lower value such as ``2 **
+18`` might help without introducing too many additional collisions on typical
+text classification tasks.
+
+Note that the dimensionality does not affect the CPU training time of
+algorithms which operate on CSR matrices (``LinearSVC(dual=True)``,
+``Perceptron``, ``SGDClassifier``, ``PassiveAggressive``) but it does for
+algorithm that work with CSC matrices (``LinearSVC(dual=False)``, ``Lasso()``,
+etc).
+
+Let's try again with the default setting::
+
+  >>> hv = HashingVectorizer()
+  >>> hv.transform(corpus)
+  ...                                       # doctest: +NORMALIZE_WHITESPACE
+  <4x1048576 sparse matrix of type '<type 'numpy.float64'>'
+      with 19 stored elements in Compressed Sparse Row format>
+
+We no longer get the collisions, but this comes at the expense of a much larger
+dimensionality of the output space.
+Of course, other terms than the 19 used here
+might still collide with each other.
+
+The :class:`HashingVectorizer` also comes with the following limitations:
+
+- it is not possible to invert the model (no ``inverse_transform`` method),
+  nor to access the original string representation of the features,
+  because of the one-way nature of the hash function that performs the mapping.
+
+- it does not provide IDF weighting as that would introduce statefulness in the
+  model. A :class:`TfidfTransformer` can be appended to it in a pipeline if
+  required.
+
+
 Customizing the vectorizer classes
------------------------------------
+----------------------------------
 
 It is possible to customize the behavior by passing a callable
 to the vectorizer constructor::
@@ -469,23 +669,52 @@ to the vectorizer constructor::
 
 In particular we name:
 
-  * ``preprocessor`` a callable that takes a string as input and return
-    another string (removing HTML tags or converting to lower case for
-    instance)
+  * ``preprocessor``: a callable that takes an entire document as input (as a
+    single string), and returns a possibly transformed version of the document,
+    still as an entire string. This can be used to remove HTML tags, lowercase
+    the entire document, etc.
 
-  * ``tokenizer`` a callable that takes a string as input and output a
-    sequence of feature occurrences (a.k.a. the tokens).
+  * ``tokenizer``: a callable that takes the output from the preprocessor
+    and splits it into tokens, then returns a list of these.
 
-  * ``analyzer`` a callable that wraps calls to the preprocessor and
-    tokenizer and further perform some filtering or n-grams extractions
-    on the tokens.
+  * ``analyzer``: a callable that replaces the preprocessor and tokenizer.
+    The default analyzers all call the preprocessor and tokenizer, but custom
+    analyzers will skip this. N-gram extraction and stop word filtering take
+    place at the analyzer level, so a custom analyzer may have to reproduce
+    these steps.
+
+(Lucene users might recognize these names, but be aware that scikit-learn
+concepts may not map one-to-one onto Lucene concepts.)
 
 To make the preprocessor, tokenizer and analyzers aware of the model
 parameters it is possible to derive from the class and override the
 ``build_preprocessor``, ``build_tokenizer``` and ``build_analyzer``
-factory method instead.
+factory methods instead of passing custom functions.
 
-Customizing the vectorizer can be very useful to handle Asian languages
+Some tips and tricks:
+
+  * If documents are pre-tokenized by an external package, then store them in
+    files (or strings) with the tokens separated by whitespace and pass
+    ``analyzer=str.split``
+  * Fancy token-level analysis such as stemming, lemmatizing, compound
+    splitting, filtering based on part-of-speech, etc. are not included in the
+    scikit-learn codebase, but can be added by customizing either the
+    tokenizer or the analyzer.
+    Here's a ``CountVectorizer`` with a tokenizer and lemmatizer using NLTK::
+
+        >>> from nltk import word_tokenize          # doctest: +SKIP
+        >>> from nltk.stem import WordNetLemmatizer # doctest: +SKIP
+        >>> class LemmaTokenizer(object):
+        ...     def __init__(self):
+        ...         self.wnl = WordNetLemmatizer()
+        ...     def __call__(self, doc):
+        ...         return [self.wnl.lemmatize(t) for t in word_tokenize(doc)]
+        ...
+        >>> vect = CountVectorizer(tokenizer=LemmaTokenizer())  # doctest: +SKIP
+
+    (Note that this will not filter out punctuation.)
+
+Customizing the vectorizer can also be useful when handling Asian languages
 that do not use an explicit word separator such as whitespace.
 
 

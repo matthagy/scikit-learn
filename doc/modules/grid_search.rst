@@ -1,10 +1,10 @@
 .. _grid_search:
 
+.. currentmodule:: sklearn.grid_search
+
 ==========================================
 Grid Search: setting estimator parameters
 ==========================================
-
-.. currentmodule:: sklearn
 
 Grid Search is used to optimize the parameters of a model (e.g. ``C``,
 ``kernel`` and ``gamma`` for Support Vector Classifier, ``alpha`` for
@@ -15,14 +15,22 @@ GridSearchCV
 ============
 
 The main class for implementing hyperparameters grid search in
-scikit-learn is :class:`grid_search.GridSearchCV`. This class is passed
+scikit-learn is :class:`GridSearchCV`. This class is passed
 a base model instance (for example ``sklearn.svm.SVC()``) along with a
-grid of potential hyper-parameter values such as::
+grid of potential hyper-parameter values specified with the `param_grid`
+attribute. For instance the following `param_grid`::
 
-  [{'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']},
-   {'C': [1, 10, 100, 1000], 'kernel': ['linear']}]
+  param_grid = [
+    {'C': [1, 10, 100, 1000], 'kernel': ['linear']},
+    {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']},
+   ]
 
-The :class:`grid_search.GridSearchCV` instance implements the usual
+specifies that two grids should be explored: one with a linear kernel and
+C values in [1, 10, 100, 1000], and the second one with an RBG kernel,
+and the cross-product of C values ranging in [1, 10, 100, 1000] and gamma
+values in [0.001, 0.0001].
+
+The :class:`GridSearchCV` instance implements the usual
 estimator API: when "fitting" it on a dataset all the possible
 combinations of hyperparameter values are evaluated and the best
 combinations is retained.
@@ -41,23 +49,89 @@ combinations is retained.
   This can be done by using the :func:`cross_validation.train_test_split`
   utility function.
 
+.. currentmodule:: sklearn.grid_search
 
-Examples
-========
+.. _gridsearch_scoring:
 
-- See :ref:`example_grid_search_digits.py` for an example of
-  Grid Search computation on the digits dataset.
+Scoring functions for GridSearchCV
+----------------------------------
+By default, :class:`GridSearchCV` uses the ``score`` function of the estimator
+to evaluate a parameter setting. These are the :func:`sklearn.metrics.accuracy_score` for classification
+and :func:`sklearn.metrics.r2_score` for regression.
+For some applications, other scoring function are better suited (for example in
+unbalanced classification, the accuracy score is often non-informative). An
+alternative scoring function can be specified via the ``scoring`` parameter to
+:class:`GridSearchCV`. 
+See :ref:`score_func_objects` for more details.
 
-- See :ref:`example_grid_search_text_feature_extraction.py` for an example
-  of Grid Search coupling parameters from a text documents feature
-  extractor (n-gram count vectorizer and TF-IDF transformer) with a
-  classifier (here a linear SVM trained with SGD with either elastic
-  net or L2 penalty) using a :class:`pipeline.Pipeline` instance.
+.. topic:: Examples:
+
+    - See :ref:`example_grid_search_digits.py` for an example of
+      Grid Search computation on the digits dataset.
+
+    - See :ref:`example_grid_search_text_feature_extraction.py` for an example
+      of Grid Search coupling parameters from a text documents feature
+      extractor (n-gram count vectorizer and TF-IDF transformer) with a
+      classifier (here a linear SVM trained with SGD with either elastic
+      net or L2 penalty) using a :class:`pipeline.Pipeline` instance.
 
 .. note::
 
   Computations can be run in parallel if your OS supports it, by using
   the keyword n_jobs=-1, see function signature for more details.
+
+
+Randomized Hyper-Parameter Optimization
+=======================================
+While using a grid of parameter settings is currently the most widely used
+method for hyper-parameter optimization, other search methods have more
+favourable properties.
+:class:`RandomizedSearchCV` implements a randomized search over hyperparameters,
+where each setting is sampled from a distribution over possible parameter values.
+This has two main benefits over searching over a grid:
+
+* A budget can be chosen independent of the number of parameters and possible values.
+
+* Adding parameters that do not influence the performance does not decrease efficiency.
+
+Specifying how parameters should be sampled is done using a dictionary, very
+similar to specifying parameters for :class:`GridSearchCV`. Additionally,
+a computation budget is specified using ``n_iter``, which is the number
+of iterations (parameter samples) to be used.
+For each parameter, either a distribution over possible values or list of
+discrete choices (which will be sampled uniformly) can be specified::
+
+  [{'C': scipy.stats.expon(scale=100), 'gamma': scipy.stats.expon(scale=.1),
+    'kernel': ['rbf'], 'class_weight':['auto', None]}]
+
+This example uses the ``scipy.stats`` module, which contains many useful
+distributions for sampling hyperparameters, such as ``expon``, ``gamma``,
+``uniform`` or ``randint``.
+In principle, any function can be passed that provides a ``rvs`` (random
+variate sample) method to sample a value. A call to the ``rvs`` function should
+provide independent random samples from possible parameter values on
+consecutive calls.
+
+    .. warning::
+        
+        The distributions in ``scipy.stats`` do not allow specifying a random
+        state. Instead, they use the global numpy random state, that can be seeded
+        via ``np.random.seed`` or set using ``np.random.set_state``.
+
+For continuous parameters, such as ``C`` above, it is important to specify
+a continuous distribution to take full advantage of the randomization. This way,
+increasing ``n_iter`` will always lead to a finer search.
+
+.. topic:: Examples:
+
+    * :ref:`example_randomized_search.py` compares the usage and efficiency
+      of randomized search and grid search.
+
+.. topic:: References:
+
+    * Bergstra, J. and Bengio, Y.,
+      Random search for hyper-parameter optimization,
+      The Journal of Machine Learning Research (2012)
 
 
 Alternatives to brute force grid search
@@ -77,6 +151,8 @@ encoding the strength of the regularizer. In this case we say that we
 compute the **regularization path** of the estimator.
 
 Here is the list of such models:
+
+.. currentmodule:: sklearn
 
 .. autosummary::
    :toctree: generated/

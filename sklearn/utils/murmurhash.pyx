@@ -12,11 +12,18 @@ and can be found here:
 """
 # Author: Olivier Grisel <olivier.grisel@ensta.org>
 #
-# License: BSD Style.
+# Licence: BSD 3 clause
 
 cimport cython
 cimport numpy as np
 import numpy as np
+
+cdef extern from "src/MurmurHash3.h":
+    void MurmurHash3_x86_32(void *key, int len, np.uint32_t seed, void *out)
+    void MurmurHash3_x86_128(void *key, int len, np.uint32_t seed, void *out)
+    void MurmurHash3_x64_128 (void *key, int len, np.uint32_t seed, void *out)
+
+np.import_array()
 
 
 cpdef np.uint32_t murmurhash3_int_u32(int key, unsigned int seed):

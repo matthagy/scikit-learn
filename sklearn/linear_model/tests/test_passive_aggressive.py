@@ -3,7 +3,8 @@ import scipy.sparse as sp
 
 from sklearn.utils.testing import assert_less
 from sklearn.utils.testing import assert_greater
-from sklearn.utils.testing import assert_array_almost_equal
+from sklearn.utils.testing import assert_array_almost_equal, assert_array_equal
+from sklearn.utils.testing import assert_raises
 
 from sklearn.base import ClassifierMixin
 from sklearn.utils import check_random_state
@@ -56,7 +57,6 @@ class MyPassiveAggressive(ClassifierMixin):
                 else:
                     step *= np.sign(y[i] - p)
 
-
                 self.w += step * X[i]
                 if self.fit_intercept:
                     self.b += step
@@ -82,10 +82,19 @@ def test_classifier_partial_fit():
             clf = PassiveAggressiveClassifier(C=1.0,
                                               fit_intercept=True,
                                               random_state=0)
-            for t in xrange(30):
+            for t in range(30):
                 clf.partial_fit(data, y, classes)
             score = clf.score(data, y)
             assert_greater(score, 0.79)
+
+
+def test_classifier_refit():
+    """Classifier can be retrained on different labels and features."""
+    clf = PassiveAggressiveClassifier().fit(X, y)
+    assert_array_equal(clf.classes_, np.unique(y))
+
+    clf.fit(X[:, :-1], iris.target_names[y])
+    assert_array_equal(clf.classes_, iris.target_names)
 
 
 def test_classifier_correctness():
@@ -100,13 +109,20 @@ def test_classifier_correctness():
                                    n_iter=2)
         clf1.fit(X, y_bin)
 
-        clf2 = PassiveAggressiveClassifier(C=1.0,
-                                           loss=loss,
-                                           fit_intercept=True,
-                                           n_iter=2)
-        clf2.fit(X, y_bin)
+        for data in (X, X_csr):
+            clf2 = PassiveAggressiveClassifier(C=1.0,
+                                               loss=loss,
+                                               fit_intercept=True,
+                                               n_iter=2)
+            clf2.fit(data, y_bin)
 
-        assert_array_almost_equal(clf1.w, clf2.coef_.ravel())
+            assert_array_almost_equal(clf1.w, clf2.coef_.ravel(), decimal=2)
+
+
+def test_classifier_undefined_methods():
+    clf = PassiveAggressiveClassifier()
+    for meth in ("predict_proba", "predict_log_proba", "transform"):
+        assert_raises(AttributeError, lambda x: getattr(clf, x), meth)
 
 
 def test_regressor_mse():
@@ -131,7 +147,7 @@ def test_regressor_partial_fit():
             reg = PassiveAggressiveRegressor(C=1.0,
                                              fit_intercept=True,
                                              random_state=0)
-            for t in xrange(50):
+            for t in range(50):
                 reg.partial_fit(data, y_bin)
             pred = reg.predict(data)
             assert_less(np.mean((pred - y_bin) ** 2), 1.7)
@@ -148,10 +164,17 @@ def test_regressor_correctness():
                                    n_iter=2)
         reg1.fit(X, y_bin)
 
-        reg2 = PassiveAggressiveRegressor(C=1.0,
-                                          loss=loss,
-                                          fit_intercept=True,
-                                          n_iter=2)
-        reg2.fit(X, y_bin)
+        for data in (X, X_csr):
+            reg2 = PassiveAggressiveRegressor(C=1.0,
+                                              loss=loss,
+                                              fit_intercept=True,
+                                              n_iter=2)
+            reg2.fit(data, y_bin)
 
-        assert_array_almost_equal(reg1.w, reg2.coef_.ravel(), decimal=2)
+            assert_array_almost_equal(reg1.w, reg2.coef_.ravel(), decimal=2)
+
+
+def test_regressor_undefined_methods():
+    reg = PassiveAggressiveRegressor()
+    for meth in ("transform",):
+        assert_raises(AttributeError, lambda x: getattr(reg, x), meth)

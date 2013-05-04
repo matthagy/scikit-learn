@@ -1,14 +1,15 @@
 # Authors: Gilles Louppe, Mathieu Blondel
-# License: BSD
+# License: BSD 3 clause
 
 import numpy as np
 
 from ..base import TransformerMixin
+from ..externals import six
 from ..utils import safe_mask, atleast2d_or_csr
 
 
 class SelectorMixin(TransformerMixin):
-    """"Transformer mixin selecting features based on importance weights.
+    """Transformer mixin selecting features based on importance weights.
 
     This implementation can be mixin on any estimator that exposes a
     ``feature_importances_`` or ``coef_`` attribute to evaluate the relative
@@ -41,8 +42,9 @@ class SelectorMixin(TransformerMixin):
         if hasattr(self, "feature_importances_"):
             importances = self.feature_importances_
             if importances is None:
-                raise ValueError("Importance weights not computed. Please  "
-                    "Set the compute_importances parameter before fit.")
+                raise ValueError("Importance weights not computed. Please set"
+                                 " the compute_importances parameter before "
+                                 "fit.")
 
         elif hasattr(self, "coef_"):
             if self.coef_.ndim == 1:
@@ -57,7 +59,7 @@ class SelectorMixin(TransformerMixin):
                              "estimator's parameter to compute it?")
         if len(importances) != X.shape[1]:
             raise ValueError("X has different number of features than"
-                    " during model fitting.")
+                             " during model fitting.")
 
         # Retrieve threshold
         if threshold is None:
@@ -67,7 +69,7 @@ class SelectorMixin(TransformerMixin):
             else:
                 threshold = getattr(self, "threshold", "mean")
 
-        if isinstance(threshold, basestring):
+        if isinstance(threshold, six.string_types):
             if "*" in threshold:
                 scale, reference = threshold.split("*")
                 scale = float(scale.strip())
@@ -92,7 +94,12 @@ class SelectorMixin(TransformerMixin):
             threshold = float(threshold)
 
         # Selection
-        mask = importances >= threshold
+        try:
+            mask = importances >= threshold
+        except TypeError:
+            # Fails in Python 3.x when threshold is str;
+            # result is array of True
+            raise ValueError("Invalid threshold: all features are discarded.")
 
         if np.any(mask):
             mask = safe_mask(X, mask)

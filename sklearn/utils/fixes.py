@@ -7,11 +7,12 @@ at which the fixe is no longer needed.
 #          Gael Varoquaux <gael.varoquaux@normalesup.org>
 #          Fabian Pedregosa <fpedregosa@acm.org>
 #          Lars Buitinck <L.J.Buitinck@uva.nl>
-# License: BSD
+# License: BSD 3 clause
 
 import collections
 from operator import itemgetter
 import inspect
+from sklearn.externals import six
 
 import numpy as np
 
@@ -25,12 +26,12 @@ except AttributeError:
             self.update(iterable)
 
         def most_common(self):
-            return sorted(self.iteritems(), key=itemgetter(1), reverse=True)
+            return sorted(six.iteritems(self), key=itemgetter(1), reverse=True)
 
         def update(self, other):
             """Adds counts for elements in other"""
             if isinstance(other, self.__class__):
-                for x, n in other.iteritems():
+                for x, n in six.iteritems(other):
                     self[x] += n
             else:
                 for x in other:
@@ -107,6 +108,7 @@ for x in np.__version__.split('.'):
     except ValueError:
         # x may be of the form dev-1ea1592
         np_version.append(x)
+np_version = tuple(np_version)
 
 if np_version[:2] < (1, 5):
     unique = _unique

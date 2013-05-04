@@ -3,7 +3,7 @@
 Robust covariance estimation and Mahalanobis distances relevance
 ================================================================
 
-For Gaussian ditributed data, the distance of an observation
+For Gaussian distributed data, the distance of an observation
 :math:`x_i` to the mode of the distribution can be computed using its
 Mahalanobis distance: :math:`d_{(\mu,\Sigma)}(x_i)^2 = (x_i -
 \mu)'\Sigma^{-1}(x_i - \mu)` where :math:`\mu` and :math:`\Sigma` are
@@ -33,7 +33,7 @@ by P.J.Rousseuw in [1].
 
 This example illustrates how the Mahalanobis distances are affected by
 outlying data: observations drawn from a contaminating distribution
-are not distinguishable from the observations comming from the real,
+are not distinguishable from the observations coming from the real,
 Gaussian distribution that one may want to work with. Using MCD-based
 Mahalanobis distances, the two populations become
 distinguishable. Associated applications are outliers detection,
@@ -48,7 +48,7 @@ are represented in the boxplot, as Wilson and Hilferty suggest [2]
     of America, 17, 684-688.
 
 """
-print __doc__
+print(__doc__)
 
 import numpy as np
 import pylab as pl
@@ -102,13 +102,12 @@ emp_cov_contour = subfig1.contour(xx, yy, np.sqrt(mahal_emp_cov),
 mahal_robust_cov = robust_cov.mahalanobis(zz)
 mahal_robust_cov = mahal_robust_cov.reshape(xx.shape)
 robust_contour = subfig1.contour(xx, yy, np.sqrt(mahal_robust_cov),
-                                cmap=pl.cm.YlOrBr_r,
-                                linestyles='dotted')
+                                 cmap=pl.cm.YlOrBr_r, linestyles='dotted')
 
-subfig1.legend([emp_cov_contour.collections[1],
-                robust_contour.collections[1], inlier_plot, outlier_plot],
-                ['MLE dist', 'robust dist', 'inliers', 'outliers'],
-                loc="upper right", borderaxespad=0)
+subfig1.legend([emp_cov_contour.collections[1], robust_contour.collections[1],
+                inlier_plot, outlier_plot],
+               ['MLE dist', 'robust dist', 'inliers', 'outliers'],
+               loc="upper right", borderaxespad=0)
 pl.xticks(())
 pl.yticks(())
 

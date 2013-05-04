@@ -3,7 +3,7 @@ The :mod:`sklearn.pls` module implements Partial Least Squares (PLS).
 """
 
 # Author: Edouard Duchesnay <edouard.duchesnay@cea.fr>
-# License: BSD Style.
+# License: BSD 3 clause
 
 from .base import BaseEstimator, RegressorMixin, TransformerMixin
 from .utils import check_arrays
@@ -16,12 +16,13 @@ __all__ = ['CCA', 'PLSCanonical', 'PLSRegression', 'PLSSVD']
 
 
 def _nipals_twoblocks_inner_loop(X, Y, mode="A", max_iter=500, tol=1e-06,
-    norm_y_weights=False):
-    """Inner loop of the iterative NIPALS algorithm. Provides an alternative
-    to the svd(X'Y); returns the first left and rigth singular vectors of X'Y.
-    See PLS for the meaning of the parameters.
-    It is similar to the Power method for determining the eigenvectors and
-    eigenvalues of a X'Y
+                                 norm_y_weights=False):
+    """Inner loop of the iterative NIPALS algorithm.
+
+    Provides an alternative to the svd(X'Y); returns the first left and rigth
+    singular vectors of X'Y.  See PLS for the meaning of the parameters.  It is
+    similar to the Power method for determining the eigenvectors and
+    eigenvalues of a X'Y.
     """
     y_score = Y[:, [0]]
     x_weights_old = 0
@@ -262,14 +263,13 @@ class _PLS(BaseEstimator, TransformerMixin, RegressorMixin):
         self.y_loadings_ = np.zeros((q, self.n_components))
 
         # NIPALS algo: outer loop, over components
-        for k in xrange(self.n_components):
+        for k in range(self.n_components):
             #1) weights estimation (inner loop)
             # -----------------------------------
             if self.algorithm == "nipals":
                 x_weights, y_weights = _nipals_twoblocks_inner_loop(
-                        X=Xk, Y=Yk, mode=self.mode,
-                        max_iter=self.max_iter, tol=self.tol,
-                        norm_y_weights=self.norm_y_weights)
+                    X=Xk, Y=Yk, mode=self.mode, max_iter=self.max_iter,
+                    tol=self.tol, norm_y_weights=self.norm_y_weights)
             elif self.algorithm == "svd":
                 x_weights, y_weights = _svd_cross_product(X=Xk, Y=Yk)
             # compute scores
@@ -286,22 +286,22 @@ class _PLS(BaseEstimator, TransformerMixin, RegressorMixin):
             # ----------------------
             # Possible memory footprint reduction may done here: in order to
             # avoid the allocation of a data chunk for the rank-one
-            # approximations matrix which is then substracted to Xk, we suggest
+            # approximations matrix which is then subtracted to Xk, we suggest
             # to perform a column-wise deflation.
             #
             # - regress Xk's on x_score
             x_loadings = np.dot(Xk.T, x_scores) / np.dot(x_scores.T, x_scores)
-            # - substract rank-one approximations to obtain remainder matrix
+            # - subtract rank-one approximations to obtain remainder matrix
             Xk -= np.dot(x_scores, x_loadings.T)
             if self.deflation_mode == "canonical":
-                # - regress Yk's on y_score, then substract rank-one approx.
-                y_loadings = np.dot(Yk.T, y_scores) \
-                           / np.dot(y_scores.T, y_scores)
+                # - regress Yk's on y_score, then subtract rank-one approx.
+                y_loadings = (np.dot(Yk.T, y_scores)
+                              / np.dot(y_scores.T, y_scores))
                 Yk -= np.dot(y_scores, y_loadings.T)
             if self.deflation_mode == "regression":
-                # - regress Yk's on x_score, then substract rank-one approx.
-                y_loadings = np.dot(Yk.T, x_scores) \
-                           / np.dot(x_scores.T, x_scores)
+                # - regress Yk's on x_score, then subtract rank-one approx.
+                y_loadings = (np.dot(Yk.T, x_scores)
+                              / np.dot(x_scores.T, x_scores))
                 Yk -= np.dot(x_scores, y_loadings.T)
             # 3) Store weights, scores and loadings # Notation:
             self.x_scores_[:, k] = x_scores.ravel()  # T
@@ -315,10 +315,12 @@ class _PLS(BaseEstimator, TransformerMixin, RegressorMixin):
         # 4) rotations from input space to transformed space (scores)
         # T = X W(P'W)^-1 = XW* (W* : p x k matrix)
         # U = Y C(Q'C)^-1 = YC* (W* : q x k matrix)
-        self.x_rotations_ = np.dot(self.x_weights_,
+        self.x_rotations_ = np.dot(
+            self.x_weights_,
             linalg.inv(np.dot(self.x_loadings_.T, self.x_weights_)))
         if Y.shape[1] > 1:
-            self.y_rotations_ = np.dot(self.y_weights_,
+            self.y_rotations_ = np.dot(
+                self.y_weights_,
                 linalg.inv(np.dot(self.y_loadings_.T, self.y_weights_)))
         else:
             self.y_rotations_ = np.ones(1)
@@ -331,8 +333,8 @@ class _PLS(BaseEstimator, TransformerMixin, RegressorMixin):
             # Y = X W(P'W)^-1Q' + Err = XB + Err
             # => B = W*Q' (p x q)
             self.coefs = np.dot(self.x_rotations_, self.y_loadings_.T)
-            self.coefs = 1. / self.x_std_.reshape((p, 1)) * \
-                    self.coefs * self.y_std_
+            self.coefs = (1. / self.x_std_.reshape((p, 1)) * self.coefs *
+                          self.y_std_)
         return self
 
     def transform(self, X, Y=None, copy=True):
@@ -539,14 +541,14 @@ class PLSRegression(_PLS):
     def __init__(self, n_components=2, scale=True,
                  max_iter=500, tol=1e-06, copy=True):
         _PLS.__init__(self, n_components=n_components, scale=scale,
-                        deflation_mode="regression", mode="A",
-                        norm_y_weights=False,
-                        max_iter=max_iter, tol=tol, copy=copy)
+                      deflation_mode="regression", mode="A",
+                      norm_y_weights=False, max_iter=max_iter, tol=tol,
+                      copy=copy)
 
 
 class PLSCanonical(_PLS):
     """ PLSCanonical implements the 2 blocks canonical PLS of the original Wold
-    algorithm [Tenenhaus 1998] p.204, refered as PLS-C2A in [Wegelin 2000].
+    algorithm [Tenenhaus 1998] p.204, referred as PLS-C2A in [Wegelin 2000].
 
     This class inherits from PLS with mode="A" and deflation_mode="canonical",
     norm_y_weights=True and algorithm="nipals", but svd should provide similar
@@ -661,9 +663,9 @@ class PLSCanonical(_PLS):
     def __init__(self, n_components=2, scale=True, algorithm="nipals",
                  max_iter=500, tol=1e-06, copy=True):
         _PLS.__init__(self, n_components=n_components, scale=scale,
-                        deflation_mode="canonical", mode="A",
-                        norm_y_weights=True, algorithm=algorithm,
-                        max_iter=max_iter, tol=tol, copy=copy)
+                      deflation_mode="canonical", mode="A",
+                      norm_y_weights=True, algorithm=algorithm,
+                      max_iter=max_iter, tol=tol, copy=copy)
 
 
 class CCA(_PLS):
@@ -767,9 +769,9 @@ class CCA(_PLS):
     def __init__(self, n_components=2, scale=True,
                  max_iter=500, tol=1e-06, copy=True):
         _PLS.__init__(self, n_components=n_components, scale=scale,
-                        deflation_mode="canonical", mode="B",
-                        norm_y_weights=True, algorithm="nipals",
-                        max_iter=max_iter, tol=tol, copy=copy)
+                      deflation_mode="canonical", mode="B",
+                      norm_y_weights=True, algorithm="nipals",
+                      max_iter=max_iter, tol=tol, copy=copy)
 
 
 class PLSSVD(BaseEstimator, TransformerMixin):

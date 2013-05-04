@@ -38,17 +38,19 @@ In a second time, we set alpha and compare the performance of different
 feature selection methods, using the area under curve (AUC) of the
 precision-recall.
 """
-print __doc__
+print(__doc__)
 
 # Author: Alexandre Gramfort and Gael Varoquaux
-# License: BSD
+# License: BSD 3 clause
+
+import warnings
 
 import pylab as pl
 import numpy as np
 from scipy import linalg
 
-from sklearn.linear_model import RandomizedLasso, lasso_stability_path, \
-                                 LassoLarsCV
+from sklearn.linear_model import (RandomizedLasso, lasso_stability_path,
+                                  LassoLarsCV)
 from sklearn.feature_selection import f_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import auc, precision_recall_curve
@@ -59,10 +61,8 @@ from sklearn.utils.extmath import pinvh
 def mutual_incoherence(X_relevant, X_irelevant):
     """Mutual incoherence, as defined by formula (26a) of [Wainwright2006].
     """
-    projector = np.dot(
-                    np.dot(X_irelevant.T, X_relevant),
-                    pinvh(np.dot(X_relevant.T, X_relevant))
-                    )
+    projector = np.dot(np.dot(X_irelevant.T, X_relevant),
+                       pinvh(np.dot(X_relevant.T, X_relevant)))
     return np.max(np.abs(projector).sum(axis=1))
 
 
@@ -96,7 +96,7 @@ for conditionning in (1, 1e-4):
     X = np.dot(X, corr)
     # Keep [Wainwright2006] (26c) constant
     X[:n_relevant_features] /= np.abs(
-            linalg.svdvals(X[:n_relevant_features])).max()
+        linalg.svdvals(X[:n_relevant_features])).max()
     X = StandardScaler().fit_transform(X.copy())
 
     # The output variable
@@ -111,8 +111,8 @@ for conditionning in (1, 1e-4):
     ###########################################################################
     # Plot stability selection path, using a high eps for early stopping
     # of the path, to save computation time
-    alpha_grid, scores_path = lasso_stability_path(X, y,
-                                            random_state=42, eps=0.05)
+    alpha_grid, scores_path = lasso_stability_path(X, y, random_state=42,
+                                                   eps=0.05)
 
     pl.figure()
     # We plot the path as a function of alpha/alpha_max to the power 1/3: the
@@ -133,23 +133,27 @@ for conditionning in (1, 1e-4):
 
     # Use 6-fold cross-validation rather than the default 3-fold: it leads to
     # a better choice of alpha:
-    lars_cv = LassoLarsCV(cv=6).fit(X, y)
+    # Stop the user warnings outputs- they are not necessary for the example
+    # as it is specifically set up to be challenging.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        lars_cv = LassoLarsCV(cv=6).fit(X, y)
 
     # Run the RandomizedLasso: we use a paths going down to .1*alpha_max
     # to avoid exploring the regime in which very noisy variables enter
     # the model
     alphas = np.linspace(lars_cv.alphas_[0], .1 * lars_cv.alphas_[0], 6)
     clf = RandomizedLasso(alpha=alphas, random_state=42).fit(X, y)
-    trees = ExtraTreesRegressor(100, compute_importances=True).fit(X, y)
+    trees = ExtraTreesRegressor(100).fit(X, y)
     # Compare with F-score
     F, _ = f_regression(X, y)
 
     pl.figure()
     for name, score in [('F-test', F),
-                ('Stability selection', clf.scores_),
-                ('Lasso coefs', np.abs(lars_cv.coef_)),
-                ('Trees', trees.feature_importances_),
-                ]:
+                        ('Stability selection', clf.scores_),
+                        ('Lasso coefs', np.abs(lars_cv.coef_)),
+                        ('Trees', trees.feature_importances_),
+                        ]:
         precision, recall, thresholds = precision_recall_curve(coef != 0,
                                                                score)
         pl.semilogy(np.maximum(score / np.max(score), 1e-4),
