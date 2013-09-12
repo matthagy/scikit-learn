@@ -15,9 +15,7 @@ libsvm command line programs.
 #          Olivier Grisel <olivier.grisel@ensta.org>
 # License: BSD 3 clause
 
-from bz2 import BZ2File
 from contextlib import closing
-import gzip
 import io
 import os.path
 
@@ -53,7 +51,7 @@ def load_svmlight_file(f, n_features=None, dtype=np.float64,
     In case the file contains a pairwise preference constraint (known
     as "qid" in the svmlight format) these are ignored unless the
     query_id parameter is set to True. These pairwise preference
-    constraints can be used to contraint the combination of samples
+    constraints can be used to constraint the combination of samples
     when using pairwise loss functions (as is the case in some
     learning to rank problems) so that only pairs with the same
     query_id value are considered.
@@ -122,8 +120,10 @@ def _gen_open(f):
 
     _, ext = os.path.splitext(f)
     if ext == ".gz":
+        import gzip
         return gzip.open(f, "rb")
     elif ext == ".bz2":
+        from bz2 import BZ2File
         return BZ2File(f, "rb")
     else:
         return open(f, "rb")
