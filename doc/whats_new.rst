@@ -11,7 +11,9 @@ Changelog
    - Added :class:`ensemble.BaggingClassifier` and
      :class:`ensemble.BaggingRegressor` meta-estimators for ensembling
      any kind of base estimator. See the :ref:`Bagging <bagging>` section of
-     the user guide for details and examples. By Gilles Louppe`_.
+     the user guide for details and examples. By `Gilles Louppe`_.
+
+    - Added :func:`metrics.pairwise_distances_argmin_min`, by Philippe Gervais.
 
    - Added predict method to :class:`cluster.AffinityPropagation` and
      :class:`cluster.MeanShift`, by `Mathieu Blondel`_.
@@ -1858,7 +1860,7 @@ Changelog
   - Refactoring of :class:`neighbors.NeighborsClassifier` and
     :func:`neighbors.kneighbors_graph`: added different algorithms for
     the k-Nearest Neighbor Search and implemented a more stable
-    algorithm for finding barycenter weigths. Also added some
+    algorithm for finding barycenter weights. Also added some
     developer documentation for this module, see
     `notes_neighbors
     <https://github.com/scikit-learn/scikit-learn/wiki/Neighbors-working-notes>`_ for more information [`Fabian Pedregosa`_].
@@ -2281,3 +2283,5 @@ David Huard, Dave Morrill, Ed Schofield, Travis Oliphant, Pearu Peterson.
 .. _Mikhail Korobov: http://kmike.ru/pages/about/
 
 .. _Kyle Kastner: http://kastnerkyle.github.io
+
+.. _@FedericoV: https://github.com/FedericoV/
