@@ -1141,6 +1141,8 @@ class TfidfVectorizer(CountVectorizer):
 
     """
 
+    _tfidf_class = TfidfTransformer
+
     def __init__(self, input='content', encoding='utf-8', charset=None,
                  decode_error='strict', charset_error=None,
                  strip_accents=None, lowercase=True,
@@ -1161,9 +1163,9 @@ class TfidfVectorizer(CountVectorizer):
             max_features=max_features, vocabulary=vocabulary, binary=False,
             dtype=dtype)
 
-        self._tfidf = TfidfTransformer(norm=norm, use_idf=use_idf,
-                                       smooth_idf=smooth_idf,
-                                       sublinear_tf=sublinear_tf)
+        self._tfidf = self._tfidf_class(norm=norm, use_idf=use_idf,
+                                        smooth_idf=smooth_idf,
+                                        sublinear_tf=sublinear_tf)
 
     # Broadcast the TF-IDF parameters to the underlying transformer instance
     # for easy grid search and repr
@@ -1238,3 +1240,93 @@ class TfidfVectorizer(CountVectorizer):
         """
         X = super(TfidfVectorizer, self).transform(raw_documents)
         return self._tfidf.transform(X, copy)
+
+class FeedMixin(object):
+
+    pass
+
+class FeedCountVectorizer(CountVectorizer, FeedMixin):
+
+    def start_feed_fit(self):
+        if not self.fixed_vocabulary:
+            self.vocabulary_ = defaultdict(None)
+            self.vocabulary_.default_factory = self.vocabulary_.__len__
+
+        self._analyze = self.build_analyzer()
+
+        self._j_indices = _make_int_array()
+        self._indptr = _make_int_array()
+        self._indptr.append(0)
+
+    @property
+    def vocab_size(self):
+        return len(self.vocabulary_)
+
+    def feed_fit(self, raw_document):
+        for feature in self._analyze(raw_document):
+            try:
+                self._j_indices.append(self.vocabulary_[feature])
+            except KeyError:
+                pass
+        self._indptr.append(len(self._j_indices))
+
+    def finish_feed_fit(self):
+        del self._analyze
+        self.vocabulary_ = dict(self.vocabulary_)
+        if not self.vocabulary_:
+            raise ValueError("empty vocabulary; perhaps the documents only"
+                             " contain stop words")
+
+        if self._j_indices:
+            j_indices = np.frombuffer(self._j_indices, dtype=np.intc)
+        else:
+            j_indices = np.array([], dtype=np.int32)
+        del self._j_indices
+
+        indptr = np.frombuffer(self._indptr, dtype=np.intc)
+        del self._indptr
+
+        values = np.ones(len(j_indices))
+        X = sp.csr_matrix((values, j_indices, indptr),
+                          shape=(len(indptr) - 1, len(self.vocabulary_)),
+                          dtype=self.dtype)
+        X.sum_duplicates()
+        X = X.tocsc()
+
+        if self.binary:
+            X.data.fill(1)
+
+        if not self.fixed_vocabulary:
+            max_df = self.max_df
+            min_df = self.min_df
+            max_features = self.max_features
+
+            X = self._sort_features(X, self.vocabulary_)
+
+            n_doc = X.shape[0]
+            max_doc_count = (max_df
+                             if isinstance(max_df, numbers.Integral)
+                             else int(round(max_df * n_doc)))
+            min_doc_count = (min_df
+                             if isinstance(min_df, numbers.Integral)
+                             else int(round(min_df * n_doc)))
+            if max_doc_count < min_doc_count:
+                raise ValueError(
+            "max_df corresponds to < documents than min_df")
+            X, self.stop_words_ = self._limit_features(X, self.vocabulary_,
+                                                       max_doc_count,
+                                                       min_doc_count,
+                                                       max_features)
+        return X
+
+
+class FeedTfidVectorizer(FeedCountVectorizer, TfidfVectorizer):
+
+    def finish_feed_fit(self):
+        X = super(FeedTfidVectorizer, self).finish_feed_fit()
+        self._tfidf.fit(X)
+        return self._tfidf.transform(X, copy=False)
+
+    def transform(self, raw_documents, copy=True):
+        return TfidfVectorizer.transform(self, raw_documents, copy=copy)
+
